@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager — To-Do App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 30px 15px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            padding: 35px;
+            max-width: 560px;
+            width: 100%;
+            height: fit-content;
+        }
+
+        h1 { text-align: center; color: #333; font-size: 1.6rem; }
+        .subtitle { text-align: center; color: #777; margin: 8px 0 25px; font-size: 0.9rem; }
+
+        /* Add-task form */
+        .add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+        .add-form input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .add-form input:focus { border-color: #11998e; }
+
+        .add-btn {
+            padding: 13px;
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .add-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 18px rgba(17, 153, 142, 0.4); }
+
+        /* Filter buttons */
+        .filters { display: flex; gap: 8px; margin: 20px 0 15px; justify-content: center; }
+        .filter-btn {
+            padding: 6px 16px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .filter-btn.active { background: #11998e; color: white; border-color: #11998e; }
+
+        /* Task list */
+        .task-list { list-style: none; }
+        .task-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            transition: box-shadow 0.2s;
+        }
+        .task-item:hover { box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08); }
+        .task-item.done .task-title { text-decoration: line-through; color: #aaa; }
+        .task-item.done .task-desc { color: #ccc; }
+
+        .task-check {
+            width: 20px;
+            height: 20px;
+            margin-top: 3px;
+            cursor: pointer;
+            flex-shrink: 0;
+            accent-color: #11998e;
+        }
+        .task-body { flex: 1; min-width: 0; }
+        .task-title { font-weight: 600; color: #333; word-break: break-word; }
+        .task-desc { font-size: 0.85rem; color: #777; margin-top: 3px; word-break: break-word; }
+        .task-time { font-size: 0.72rem; color: #aaa; margin-top: 4px; }
+
+        .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .icon-btn {
+            border: none;
+            background: #f3f3f3;
+            border-radius: 8px;
+            padding: 6px 9px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .icon-btn:hover { background: #e6e6e6; }
+
+        .empty { text-align: center; color: #999; padding: 25px 0; font-size: 0.9rem; }
+
+        .counter { text-align: center; color: #888; font-size: 0.8rem; margin-top: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Task Manager</h1>
+        <p class="subtitle">Streamline your daily tasks — saved in your browser</p>
+
+        <!-- Form to add a new task -->
+        <form class="add-form" id="addForm">
+            <input type="text" id="titleInput" placeholder="What needs to be done?" required>
+            <input type="text" id="descInput" placeholder="Add a note (optional)">
+            <button type="submit" class="add-btn">+ Add Task</button>
+        </form>
+
+        <!-- Filter buttons: show all / active / completed tasks -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="active">Active</button>
+            <button class="filter-btn" data-filter="done">Completed</button>
+        </div>
+
+        <!-- The list of tasks is rendered here by JavaScript -->
+        <ul class="task-list" id="taskList"></ul>
+
+        <p class="counter" id="counter"></p>
+    </div>
+
+    <script>
+        // ─────────────────────────────────────────────────────────────────
+        // Task Manager logic (runs entirely in the browser)
+        //
+        // Tasks are stored in localStorage, which is a small storage area
+        // built into the browser. This means your tasks stay saved even
+        // after you close the tab - no server or database needed.
+        // ─────────────────────────────────────────────────────────────────
+
+        const STORAGE_KEY = "task_manager_tasks";
+
+        // Load tasks from localStorage, or start with an empty list.
+        // localStorage only stores text, so we parse the JSON string back
+        // into a real JavaScript array.
+        let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+        // The currently selected filter: "all", "active", or "done".
+        let currentFilter = "all";
+
+        // Save the current tasks array back to localStorage as a JSON string.
+        function saveTasks() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        }
+
+        // Work out the next unique ID (highest existing id + 1).
+        function nextId() {
+            return tasks.length ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+        }
+
+        // CREATE: add a new task from the form inputs.
+        function addTask(title, description) {
+            tasks.push({
+                id: nextId(),
+                title: title,
+                description: description,
+                done: false,
+                createdAt: new Date().toLocaleString()
+            });
+            saveTasks();
+            render();
+        }
+
+        // UPDATE (status): flip a task between done and not done.
+        function toggleDone(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) { task.done = !task.done; saveTasks(); render(); }
+        }
+
+        // UPDATE (text): edit a task's title using a prompt dialog.
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            const newTitle = prompt("Edit task title:", task.title);
+            if (newTitle !== null && newTitle.trim() !== "") {
+                task.title = newTitle.trim();
+                saveTasks();
+                render();
+            }
+        }
+
+        // DELETE: remove a task after confirming.
+        function deleteTask(id) {
+            if (!confirm("Delete this task?")) return;
+            tasks = tasks.filter(t => t.id !== id);
+            saveTasks();
+            render();
+        }
+
+        // READ: draw the task list on screen based on the current filter.
+        function render() {
+            const list = document.getElementById("taskList");
+            list.innerHTML = "";
+
+            // Decide which tasks to show based on the active filter
+            const visible = tasks.filter(t => {
+                if (currentFilter === "active") return !t.done;
+                if (currentFilter === "done") return t.done;
+                return true; // "all"
+            });
+
+            // Show a friendly message if there is nothing to display
+            if (visible.length === 0) {
+                list.innerHTML = '<li class="empty">No tasks here yet.</li>';
+            }
+
+            // Build a list item for each visible task
+            visible.forEach(task => {
+                const li = document.createElement("li");
+                li.className = "task-item" + (task.done ? " done" : "");
+
+                li.innerHTML = `
+                    <input type="checkbox" class="task-check" ${task.done ? "checked" : ""}>
+                    <div class="task-body">
+                        <div class="task-title"></div>
+                        <div class="task-desc"></div>
+                        <div class="task-time"></div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="icon-btn edit">✏️</button>
+                        <button class="icon-btn del">🗑️</button>
+                    </div>
+                `;
+
+                // Set text content safely (avoids HTML injection from user input)
+                li.querySelector(".task-title").textContent = task.title;
+                li.querySelector(".task-desc").textContent = task.description || "";
+                li.querySelector(".task-time").textContent = "Created: " + task.createdAt;
+
+                // Wire up the buttons / checkbox for this task
+                li.querySelector(".task-check").addEventListener("change", () => toggleDone(task.id));
+                li.querySelector(".edit").addEventListener("click", () => editTask(task.id));
+                li.querySelector(".del").addEventListener("click", () => deleteTask(task.id));
+
+                list.appendChild(li);
+            });
+
+            // Update the counter at the bottom
+            const remaining = tasks.filter(t => !t.done).length;
+            document.getElementById("counter").textContent =
+                `${tasks.length} task(s) total — ${remaining} remaining`;
+        }
+
+        // Handle the add-task form submission
+        document.getElementById("addForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const title = document.getElementById("titleInput").value.trim();
+            const desc = document.getElementById("descInput").value.trim();
+            if (!title) return;
+            addTask(title, desc);
+            e.target.reset();                       // clear the form
+            document.getElementById("titleInput").focus();
+        });
+
+        // Handle filter button clicks
+        document.querySelectorAll(".filter-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelector(".filter-btn.active").classList.remove("active");
+                btn.classList.add("active");
+                currentFilter = btn.dataset.filter;
+                render();
+            });
+        });
+
+        // Draw the initial list when the page loads
+        render();
+    </script>
+</body>
+</html>
